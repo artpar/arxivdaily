@@ -1,4 +1,5 @@
 import spacy
+import textacy
 
 nlp = spacy.load('en')
 
@@ -82,7 +83,11 @@ def parse_sentence(sentence):
 
 with open("abstracts.txt") as f:
     tag_map = {}
+    lines = []
     for line in f:
+        lines.append(line)
+
+    for line in lines:
         sentences = get_sentences(line)
 
         for sentence in sentences:
@@ -92,7 +97,61 @@ with open("abstracts.txt") as f:
                     tag_map[tag] += tags[tag]
                 else:
                     tag_map[tag] = tags[tag]
-        print("\n\n")
 
-    for tag in tag_map:
-        print(tag_map[tag], tag)
+    corpus = textacy.Corpus('en', lines)
+
+    for doc in corpus:
+        matches = textacy.extract.pos_regex_matches(doc, r'<PRON> <VERB> <DET>? <PRON>?')
+        acronyms = textacy.extract.acronyms_and_definitions(doc)
+        # semistructured_statements = textacy.extract.semistructured_statements(doc)
+        subject_verb_object_triples = textacy.extract.subject_verb_object_triples(doc)
+        key_terms_from_semantic_network = textacy.keyterms.key_terms_from_semantic_network(doc, 'lemma', 3)
+        singlerank = textacy.keyterms.singlerank(doc)
+        textrank = textacy.keyterms.textrank(doc)
+        sgrank = textacy.keyterms.sgrank(doc)
+
+        for sent in doc.sents:
+            print(sent)
+        print("====")
+        print(acronyms)
+        print("==subject_verb_object_triples==")
+        for trip in subject_verb_object_triples:
+            print(trip)
+        print("==sgrank==")
+        for sgr in sgrank:
+            print(sgr)
+        print("==singlerank==")
+        for sgr in singlerank:
+            print(sgr)
+        print("==textrank==")
+        for sgr in textrank:
+            print(sgr)
+        print("==key_terms_from_semantic_network==")
+        for trip in key_terms_from_semantic_network:
+            print(trip)
+        print("==matches==")
+        for match in matches:
+            print(match)
+        print("\n")
+
+    vectorizer = textacy.Vectorizer(
+        weighting='tfidf', normalize=True, smooth_idf=True,
+        min_df=3, max_df=0.95)
+    doc_term_matrix = vectorizer.fit_transform((
+        doc.to_terms_list(
+            ngrams=1,
+            named_entities=True,
+            as_strings=True
+        ) for doc in corpus)
+    )
+    print(repr(doc_term_matrix))
+
+    models = ['nmf', 'lda', 'lsa']
+    for m in models:
+        model = textacy.TopicModel(m, n_topics=10)
+        model.fit(doc_term_matrix)
+        doc_topic_matrix = model.transform(doc_term_matrix)
+        print("==", m, "==")
+        print(doc_topic_matrix.shape)
+        for topic_idx, top_terms in model.top_topic_terms(vectorizer.id_to_term, top_n=10):
+            print('topic', topic_idx, ':', '   '.join(top_terms))

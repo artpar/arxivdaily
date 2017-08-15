@@ -2,3 +2,4 @@ spacy
 apistar
 keras
 gensim
+textacy
